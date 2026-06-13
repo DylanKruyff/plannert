@@ -37,12 +37,17 @@ const activityItemSchema = z.object({
   title: z
     .string()
     .describe(
-      "Name of a real, well-known venue or a concrete activity in the city"
+      "The activity/experience itself, not just a venue name. Phrase it as something to DO " +
+        '(e.g. "Catch live jazz at the Bimhuis", "Browse the Saturday flea market at IJ-Hallen"). ' +
+        "For events like concerts/shows/festivals, name the type of event plus the real venue/area " +
+        "where they happen, NOT just the building."
     ),
   emoji: z.string().describe("A single emoji that represents the activity"),
   description: z
     .string()
-    .describe("One short sentence on why this fits the request"),
+    .describe(
+      "One short sentence on what you'll actually do there and why it fits the request"
+    ),
   locationName: z
     .string()
     .describe("Neighbourhood, area, or venue name within the city"),
@@ -57,7 +62,13 @@ const activityItemSchema = z.object({
   priceRange: z.string().describe('e.g. "Free", "€10/person", "€20-30/person"'),
   sourceUrl: z
     .string()
-    .describe("A Google Maps search URL for the venue/activity in the city"),
+    .describe(
+      "Where the user can actually find/book this. For time-bound events (concerts, shows, " +
+        "festivals, sports), use an event-listings or venue 'what's on' search URL (e.g. " +
+        "Songkick, Ticketmaster, Resident Advisor, or the venue's events page) so they see real " +
+        "upcoming dates. Otherwise a Google Maps search link is fine: " +
+        "https://www.google.com/maps/search/?api=1&query=<url-encoded venue and city>."
+    ),
   confidenceScore: z.number().min(0).max(1),
   tags: z.array(z.string()),
 });
@@ -72,6 +83,33 @@ export type DiscoveredPlan = {
   resolvedLocation: string;
   activities: Activity[];
 };
+
+/**
+ * Broad activity categories used to nudge the model toward a varied mix instead
+ * of always returning the same handful of "safe" venues. We sample a rotating
+ * subset per request so repeated searches surface fresh ideas.
+ */
+const ACTIVITY_FLAVORS = [
+  "food & drink (restaurants, street food, tastings)",
+  "arts & culture (museums, galleries, theatre, live music)",
+  "outdoors & nature (parks, walks, water, viewpoints)",
+  "active & sporty (climbing, cycling, watersports, skating)",
+  "nightlife & social (bars, comedy, dancing)",
+  "hands-on & workshops (cooking, pottery, crafts)",
+  "games & play (arcades, bowling, mini-golf, escape rooms)",
+  "wellness & relaxed (spas, baths, slow cafés)",
+  "markets & shopping (flea markets, design shops, bookstores)",
+  "quirky & offbeat (hidden gems, unusual tours, local secrets)",
+];
+
+function shuffle<T>(items: T[]): T[] {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
 
 function fallbackPlan(
   prompt: string,
@@ -103,11 +141,20 @@ export async function discoverPlan(
 ): Promise<DiscoveredPlan> {
   if (!hasAi) return fallbackPlan(prompt, locationHint);
 
+  // Rotate a subset of flavors per request and pass a random seed so repeated
+  // searches for the same thing surface genuinely different, creative ideas
+  // instead of converging on the same predictable venues.
+  const flavorMix = shuffle(ACTIVITY_FLAVORS).slice(0, 6);
+  const creativitySeed = Math.floor(Math.random() * 1_000_000);
+
   try {
     const { object } = await generateObject({
       model: google(MODEL),
       providerOptions: FAST_OPTIONS,
       schema: planSchema,
+      // Higher temperature + per-request seed widen the variety of suggestions.
+      temperature: 1,
+      seed: creativitySeed,
       prompt: `You help a user find things to do. Return preferences AND activities together.
 
 User request: "${prompt}".
@@ -117,17 +164,27 @@ ${
     : ""
 }
 
-1) preferences: extract structured preferences. Only use what is stated or clearly implied; use null for anything unknown. "location" is the city/area to plan in (named in the request, otherwise the assumed location above, otherwise null).
+1) preferences: extract structured preferences. Only use what is stated or clearly implied; use null for anything unknown. "location" is the city/area to plan in (named in the request, otherwise the assumed location above, otherwise null). For "dateTimePreference", only fill it if the request actually mentions a day or time (e.g. "tonight", "this weekend", "Sunday"); if no date/time is mentioned, leave it null so the plan defaults to today / the very near future.
 
-2) activities: suggest 8 real, currently-plausible activities or genuine, well-known venues in or very near the chosen location that fit the request. Prefer concrete, real places (a known museum, park, bowling alley, climbing gym, neighbourhood for dinner) over generic placeholders.
+2) activities: suggest 8 real, currently-plausible THINGS TO DO in or very near the chosen location that fit the request. Each item should be an activity or experience, not just the name of a venue.
+
+If the request is about time-bound events (concerts, gigs, shows, plays, festivals, sports, exhibitions), do NOT just list the venues. Instead suggest the actual experience — e.g. "See a touring band at Paradiso", "Catch a jazz set at the Bimhuis", "Watch what's on at the Concertgebouw" — and put an event-listings or venue "what's on" URL in sourceUrl so the user can find the real upcoming dates. Since you don't have live listings, do not name specific artists, exact dates, or ticket prices you aren't sure about; describe the kind of event and point to where the real schedule lives.
+
+Make the set DIVERSE and CREATIVE:
+- Span several different vibes — aim to draw from a mix such as: ${flavorMix.join("; ")}.
+- Mix obvious crowd-pleasers with a couple of lesser-known local gems or unexpected, memorable options.
+- Vary the price ranges, times of day, energy levels, and indoor/outdoor settings rather than repeating one type.
+- Avoid defaulting to the same handful of generic suggestions; surprise the user with at least one or two ideas they likely wouldn't have thought of.
+- Use random seed ${creativitySeed} as inspiration to keep this list fresh and distinct from previous answers.
 
 Rules for activities:
+- Phrase every title as something to DO, not a bare venue name.
 - Only suggest things that realistically exist there. If unsure of an exact venue, suggest a real activity type tied to a real neighbourhood/area instead of inventing a fake business name.
-- Do NOT invent specific opening hours, dates, ticket availability, or phone numbers.
+- Do NOT invent specific opening hours, exact dates, line-ups, ticket availability, or phone numbers; for events, point to listings instead of guessing the schedule.
 - Provide approximate coordinates near the real place.
-- sourceUrl must be a Google Maps search link, e.g. https://www.google.com/maps/search/?api=1&query=<url-encoded venue and city>.
+- sourceUrl: for time-bound events use an event-listings or venue "what's on" search URL; otherwise a Google Maps search link, e.g. https://www.google.com/maps/search/?api=1&query=<url-encoded venue and city>.
 - Give realistic price ranges and a sensible start hour (24h) for each.
-- Rank from best to worst fit and set confidenceScore accordingly (best ~0.9).`,
+- Rank from best to worst fit and set confidenceScore accordingly (best ~0.9), but still keep the set varied.`,
     });
 
     const preferences = object.preferences;

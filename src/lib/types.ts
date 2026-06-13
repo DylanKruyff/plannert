@@ -43,6 +43,7 @@ export type ResponseRecord = {
 
 export type PlanView = {
   id: string;
+  creatorId: string;
   creatorName: string;
   activity: Activity;
   status: PlanStatus;

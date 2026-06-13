@@ -1,10 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { Users, Share2, ThumbsUp } from "lucide-react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { Users, Share2, ThumbsUp, ChevronRight } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { PromptInput } from "@/components/PromptInput";
+import { getCreatorId } from "@/lib/creator";
+import { summarize } from "@/lib/plan";
+import type { PlanView } from "@/lib/types";
 
 function getPosition(): Promise<GeolocationPosition | null> {
   return new Promise((resolve) => {
@@ -23,6 +27,28 @@ function getPosition(): Promise<GeolocationPosition | null> {
 export default function HomePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [plans, setPlans] = useState<PlanView[] | null>(null);
+
+  useEffect(() => {
+    const creatorId = getCreatorId();
+    if (!creatorId) return;
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/plans?creatorId=${encodeURIComponent(creatorId)}`
+        );
+        if (!res.ok) return;
+        const { plans } = await res.json();
+        if (active) setPlans(plans);
+      } catch {
+        // Non-critical: the landing page still works without the plan list.
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleSubmit = async (prompt: string) => {
     setLoading(true);
@@ -55,6 +81,17 @@ export default function HomePage() {
           <PromptInput onSubmit={handleSubmit} loading={loading} />
         </section>
 
+        {plans && plans.length > 0 && (
+          <section className="mt-16">
+            <h2 className="text-lg font-bold text-foreground">Your plans</h2>
+            <div className="mt-4 space-y-3">
+              {plans.map((plan) => (
+                <PlanRow key={plan.id} plan={plan} />
+              ))}
+            </div>
+          </section>
+        )}
+
         <section className="mt-16 grid gap-4 sm:grid-cols-3">
           <Feature
             icon={<Users className="h-6 w-6" />}
@@ -77,6 +114,27 @@ export default function HomePage() {
         Plannert — the product that creates agreement.
       </footer>
     </>
+  );
+}
+
+function PlanRow({ plan }: { plan: PlanView }) {
+  const summary = summarize(plan);
+  return (
+    <Link
+      href={`/plan/${plan.id}`}
+      className="flex items-center gap-4 rounded-2xl border border-border bg-surface p-4 shadow-card transition-colors hover:border-primary/40"
+    >
+      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-2xl">
+        {plan.activity.emoji}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-bold text-foreground">
+          {plan.activity.title}
+        </p>
+        <p className="truncate text-sm text-muted">{summary.headline}</p>
+      </div>
+      <ChevronRight className="h-5 w-5 shrink-0 text-muted" />
+    </Link>
   );
 }
 

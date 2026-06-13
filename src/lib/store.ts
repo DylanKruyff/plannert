@@ -23,6 +23,7 @@ const DATA_FILE = path.join(DATA_DIR, "plans.json");
 
 type StoredPlan = {
   id: string;
+  creatorId: string;
   creatorName: string;
   activity: Activity;
   status: PlanStatus;
@@ -54,6 +55,7 @@ function computeStatus(plan: StoredPlan): PlanStatus {
 function toView(plan: StoredPlan): PlanView {
   return {
     id: plan.id,
+    creatorId: plan.creatorId,
     creatorName: plan.creatorName,
     activity: plan.activity,
     status: computeStatus(plan),
@@ -65,14 +67,15 @@ function toView(plan: StoredPlan): PlanView {
 
 export async function createPlan(
   activity: Activity,
-  creatorName: string
+  creatorName: string,
+  creatorId: string
 ): Promise<PlanView> {
   const token = nanoid(8);
 
   if (hasDatabase) {
     const plan = await prisma.plan.create({
       data: {
-        creatorId: nanoid(8),
+        creatorId,
         creatorName,
         activityJson: activity as unknown as object,
         status: "open",
@@ -86,6 +89,7 @@ export async function createPlan(
   const store = await readFileStore();
   const stored: StoredPlan = {
     id: nanoid(8),
+    creatorId,
     creatorName,
     activity,
     status: "open",
@@ -96,6 +100,25 @@ export async function createPlan(
   store.plans.push(stored);
   await writeFileStore(store);
   return toView(stored);
+}
+
+export async function getPlansByCreator(
+  creatorId: string
+): Promise<PlanView[]> {
+  if (hasDatabase) {
+    const plans = await prisma.plan.findMany({
+      where: { creatorId },
+      orderBy: { createdAt: "desc" },
+      include: { invites: { include: { responses: true } } },
+    });
+    return plans.map(prismaToView);
+  }
+
+  const store = await readFileStore();
+  return store.plans
+    .filter((p) => p.creatorId === creatorId)
+    .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
+    .map(toView);
 }
 
 export async function getPlanByToken(token: string): Promise<PlanView | null> {
@@ -195,6 +218,7 @@ function prismaToView(plan: any): PlanView {
 
   return {
     id: plan.id,
+    creatorId: plan.creatorId,
     creatorName: plan.creatorName,
     activity: plan.activityJson as Activity,
     status: plan.status as PlanStatus,

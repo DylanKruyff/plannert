@@ -128,22 +128,52 @@ export function cityCoords(location: string): { lat: number; lng: number } {
   return CITY_COORDS[location] ?? CITY_COORDS["your area"];
 }
 
-export function nextWeekendDate(preference: string | null): Date {
+/**
+ * Resolve the base calendar day for a plan from a loose date preference.
+ *
+ * When nothing is specified we intentionally default to *today* (and let
+ * {@link startTimeFor} roll any already-passed activities to the next day) so
+ * plans land today or in the very near future, rather than jumping to the
+ * weekend. Explicit hints ("tomorrow", "this weekend", "sunday", …) are honored.
+ */
+export function resolveBaseDate(preference: string | null): Date {
   const now = new Date();
   const result = new Date(now);
   const pref = (preference ?? "").toLowerCase();
 
-  if (pref.includes("today")) {
-    // keep today
-  } else if (pref.includes("tomorrow")) {
+  if (pref.includes("tomorrow")) {
     result.setDate(now.getDate() + 1);
-  } else {
-    // default to upcoming Saturday
-    const day = now.getDay();
-    const daysUntilSat = (6 - day + 7) % 7 || 7;
+  } else if (pref.includes("sunday") || pref.includes("sun")) {
+    const daysUntilSun = (7 - now.getDay()) % 7;
+    result.setDate(now.getDate() + daysUntilSun);
+  } else if (
+    pref.includes("weekend") ||
+    pref.includes("saturday") ||
+    pref.includes("sat")
+  ) {
+    // Upcoming Saturday (today if it's already Saturday).
+    const daysUntilSat = (6 - now.getDay() + 7) % 7;
     result.setDate(now.getDate() + daysUntilSat);
   }
+  // Default (incl. "today"/"tonight" or no preference): keep today.
   return result;
+}
+
+/**
+ * Build a concrete start time for an activity on the given base day. When the
+ * plan is for *today* and the chosen hour has already passed, roll the activity
+ * to the same hour tomorrow so suggestions always sit in the near future.
+ */
+function startTimeFor(baseDate: Date, hour: number): Date {
+  const now = new Date();
+  const start = new Date(baseDate);
+  start.setHours(Math.min(23, Math.max(0, Math.round(hour))), 0, 0, 0);
+
+  const isToday = baseDate.toDateString() === now.toDateString();
+  if (isToday && start.getTime() <= now.getTime()) {
+    start.setDate(start.getDate() + 1);
+  }
+  return start;
 }
 
 function scoreTemplate(t: Template, prefs: SearchPreferences): number {
@@ -174,15 +204,14 @@ export function generateActivities(
 ): Activity[] {
   const coords =
     CITY_COORDS[resolvedLocation] ?? CITY_COORDS["your area"];
-  const baseDate = nextWeekendDate(prefs.dateTimePreference);
+  const baseDate = resolveBaseDate(prefs.dateTimePreference);
 
   const ranked = TEMPLATES.map((t) => ({ t, score: scoreTemplate(t, prefs) }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 6);
 
   return ranked.map(({ t, score }, i) => {
-    const start = new Date(baseDate);
-    start.setHours(t.hour, 0, 0, 0);
+    const start = startTimeFor(baseDate, t.hour);
     const end = new Date(start);
     end.setHours(start.getHours() + t.durationHrs);
 
@@ -231,7 +260,7 @@ export function buildActivities(
   resolvedLocation: string
 ): Activity[] {
   const coords = cityCoords(resolvedLocation);
-  const baseDate = nextWeekendDate(prefs.dateTimePreference);
+  const baseDate = resolveBaseDate(prefs.dateTimePreference);
 
   return ideas.map((idea, i) => {
     const hour = Number.isFinite(idea.startHour) ? idea.startHour : 19;
@@ -240,8 +269,7 @@ export function buildActivities(
         ? idea.durationHrs
         : 2;
 
-    const start = new Date(baseDate);
-    start.setHours(Math.min(23, Math.max(0, Math.round(hour))), 0, 0, 0);
+    const start = startTimeFor(baseDate, hour);
     const end = new Date(start);
     end.setHours(start.getHours() + duration);
 

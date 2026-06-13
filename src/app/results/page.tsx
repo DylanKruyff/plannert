@@ -8,6 +8,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { ActivityCard } from "@/components/ActivityCard";
 import { RefineBar } from "@/components/RefineBar";
 import { Button } from "@/components/ui/button";
+import { getCreatorId } from "@/lib/creator";
 import type { Activity, ActivitySearchResponse } from "@/lib/types";
 
 const LOADING_MESSAGES = [
@@ -25,7 +26,7 @@ const LOADING_MESSAGES = [
  * Cycles through a list of playful status messages while `active` is true,
  * resetting back to the first message each time a new load begins.
  */
-function useRotatingMessage(active: boolean, intervalMs = 1800) {
+function useRotatingMessage(active: boolean, intervalMs = 2800) {
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
@@ -130,7 +131,7 @@ function ResultsInner() {
       const res = await fetch("/api/plans/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ activity }),
+        body: JSON.stringify({ activity, creatorId: getCreatorId() }),
       });
       if (!res.ok) throw new Error("Could not create plan");
       const { planId } = await res.json();

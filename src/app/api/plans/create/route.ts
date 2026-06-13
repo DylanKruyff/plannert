@@ -22,6 +22,7 @@ const activitySchema = z.object({
 const bodySchema = z.object({
   activity: activitySchema,
   creatorName: z.string().min(1).max(60).optional(),
+  creatorId: z.string().min(1).max(64),
 });
 
 export async function POST(req: Request) {
@@ -43,7 +44,8 @@ export async function POST(req: Request) {
   try {
     const plan = await createPlan(
       parsed.data.activity as Activity,
-      parsed.data.creatorName?.trim() || "A friend"
+      parsed.data.creatorName?.trim() || "A friend",
+      parsed.data.creatorId
     );
     return NextResponse.json({
       planId: plan.id,
