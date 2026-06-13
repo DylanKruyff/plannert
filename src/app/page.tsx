@@ -111,7 +111,7 @@ export default function HomePage() {
         </section>
       </main>
       <footer className="border-t border-border/60 py-6 text-center text-sm text-muted">
-        Plannert — the product that creates agreement.
+        Plannert — the tool that gets everyone on board.
       </footer>
     </>
   );
