@@ -1,20 +1,58 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, MapPin, Loader2, Frown } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { ActivityCard } from "@/components/ActivityCard";
+import { RefineBar } from "@/components/RefineBar";
 import { Button } from "@/components/ui/button";
 import type { Activity, ActivitySearchResponse } from "@/lib/types";
+
+const LOADING_MESSAGES = [
+  "Scouting the best spots…",
+  "Reading the room…",
+  "Checking the vibe…",
+  "Weighing budget and timing…",
+  "Asking the locals…",
+  "Shortlisting the good stuff…",
+  "Lining up your options…",
+  "Almost there…",
+];
+
+/**
+ * Cycles through a list of playful status messages while `active` is true,
+ * resetting back to the first message each time a new load begins.
+ */
+function useRotatingMessage(active: boolean, intervalMs = 1800) {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    if (!active) {
+      setIndex(0);
+      return;
+    }
+    const id = setInterval(() => {
+      setIndex((i) => (i + 1) % LOADING_MESSAGES.length);
+    }, intervalMs);
+    return () => clearInterval(id);
+  }, [active, intervalMs]);
+
+  return LOADING_MESSAGES[index];
+}
 
 function ResultsInner() {
   const router = useRouter();
   const params = useSearchParams();
-  const prompt = params.get("q") ?? "";
+  const initialPrompt = params.get("q") ?? "";
   const lat = params.get("lat");
   const lng = params.get("lng");
+
+  // The prompt currently being searched, and the (possibly edited) draft in the
+  // refine bar. Seeding both from the URL keeps reloads and shared links working.
+  const [searchPrompt, setSearchPrompt] = useState(initialPrompt);
+  const [draft, setDraft] = useState(initialPrompt);
 
   const [data, setData] = useState<ActivitySearchResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -22,25 +60,41 @@ function ResultsInner() {
   const [choosingId, setChoosingId] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
 
+  const resultsRef = useRef<HTMLDivElement>(null);
+  const loadingMessage = useRotatingMessage(loading);
+
   const retry = () => {
     setLoading(true);
     setError(null);
     setRetryKey((k) => k + 1);
   };
 
+  const refine = (next: string) => {
+    if (next === searchPrompt) {
+      retry();
+      return;
+    }
+    setSearchPrompt(next);
+    const sp = new URLSearchParams(params.toString());
+    sp.set("q", next);
+    router.replace(`/results?${sp.toString()}`, { scroll: false });
+  };
+
   useEffect(() => {
-    if (!prompt) {
+    if (!searchPrompt) {
       router.replace("/");
       return;
     }
     let active = true;
+    setLoading(true);
+    setError(null);
     (async () => {
       try {
         const res = await fetch("/api/activity/search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            prompt,
+            prompt: searchPrompt,
             lat: lat ? Number(lat) : undefined,
             lng: lng ? Number(lng) : undefined,
           }),
@@ -53,6 +107,10 @@ function ResultsInner() {
         if (active) {
           setData(json);
           setError(null);
+          resultsRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
         }
       } catch (e) {
         if (active)
@@ -64,7 +122,7 @@ function ResultsInner() {
     return () => {
       active = false;
     };
-  }, [prompt, lat, lng, router, retryKey]);
+  }, [searchPrompt, lat, lng, router, retryKey]);
 
   const choose = async (activity: Activity) => {
     setChoosingId(activity.id);
@@ -107,43 +165,69 @@ function ResultsInner() {
           <p className="text-sm font-semibold uppercase tracking-wide text-primary">
             Your request
           </p>
-          <h1 className="mt-1 text-2xl font-extrabold text-foreground">
-            “{prompt}”
-          </h1>
+          <div className="mt-2">
+            <RefineBar
+              value={draft}
+              onChange={setDraft}
+              onSubmit={refine}
+              loading={loading}
+            />
+          </div>
         </div>
 
-        {loading && (
-          <div className="mt-16 flex flex-col items-center text-center text-muted">
-            <Loader2 className="h-10 w-10 animate-spin text-primary" />
-            <p className="mt-4 text-lg font-semibold text-foreground">
-              Finding great options…
-            </p>
-            <p className="text-sm">Matching your vibe, budget, and timing.</p>
-          </div>
-        )}
+        <div ref={resultsRef} className="scroll-mt-6">
+          {loading && !data && (
+            <div className="mt-16 flex flex-col items-center text-center text-muted">
+              <Loader2 className="h-10 w-10 animate-spin text-primary" />
+              <p
+                key={loadingMessage}
+                className="mt-4 animate-[fadeIn_0.4s_ease] text-lg font-semibold text-foreground"
+              >
+                {loadingMessage}
+              </p>
+              <p className="text-sm">Hang tight, this only takes a moment.</p>
+            </div>
+          )}
 
-        {error && !loading && (
-          <div className="mt-16 flex flex-col items-center text-center">
-            <Frown className="h-10 w-10 text-muted" />
-            <p className="mt-4 text-lg font-semibold text-foreground">{error}</p>
-            <Button onClick={retry} className="mt-4">
-              Try again
-            </Button>
-          </div>
-        )}
+          {error && !loading && (
+            <div className="mt-16 flex flex-col items-center text-center">
+              <Frown className="h-10 w-10 text-muted" />
+              <p className="mt-4 text-lg font-semibold text-foreground">
+                {error}
+              </p>
+              <Button onClick={retry} className="mt-4">
+                Try again
+              </Button>
+            </div>
+          )}
 
-        {data && !loading && (
-          <section className="mt-6 grid gap-5 sm:grid-cols-2">
-            {data.activities.map((activity) => (
-              <ActivityCard
-                key={activity.id}
-                activity={activity}
-                onChoose={choose}
-                selecting={choosingId === activity.id}
-              />
-            ))}
-          </section>
-        )}
+          {data && !error && (
+            <section className="relative mt-6">
+              {loading && (
+                <div className="absolute -top-3 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-surface px-4 py-1.5 text-sm font-semibold text-foreground shadow-card">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  <span key={loadingMessage} className="animate-[fadeIn_0.4s_ease]">
+                    {loadingMessage}
+                  </span>
+                </div>
+              )}
+              <div
+                className={`grid gap-5 transition-opacity sm:grid-cols-2 ${
+                  loading ? "pointer-events-none opacity-40" : "opacity-100"
+                }`}
+              >
+                {data.activities.map((activity) => (
+                  <ActivityCard
+                    key={activity.id}
+                    activity={activity}
+                    onChoose={choose}
+                    selecting={choosingId === activity.id}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
       </main>
     </>
   );
