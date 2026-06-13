@@ -4,14 +4,29 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "postinstall": "prisma generate",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "db:start": "pg_ctl -D .pgdata -o \"-p 5433 -k /tmp\" -l .pgdata/server.log start",
+    "db:stop": "pg_ctl -D .pgdata stop"
   },
   "dependencies": {
+    "@ai-sdk/google": "^3.0.82",
+    "@prisma/client": "^6.19.3",
+    "ai": "^6.0.204",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.18.0",
+    "nanoid": "^5.1.11",
     "next": "16.2.9",
+    "prisma": "^6.19.3",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "tailwind-merge": "^3.6.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

@@ -32,6 +32,13 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+
+# plannert local dev data store (used when no DATABASE_URL is set)
+/.plannert-data
+
+# project-local PostgreSQL cluster
+/.pgdata
 
 # vercel
 .vercel

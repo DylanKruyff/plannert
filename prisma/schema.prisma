@@ -1,0 +1,41 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Plan {
+  id           String   @id @default(cuid())
+  creatorId    String
+  creatorName  String   @default("A friend")
+  activityJson Json
+  status       String   @default("open")
+  createdAt    DateTime @default(now())
+
+  invites Invite[]
+}
+
+model Invite {
+  id        String   @id @default(cuid())
+  planId    String
+  token     String   @unique
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+
+  plan      Plan       @relation(fields: [planId], references: [id], onDelete: Cascade)
+  responses Response[]
+}
+
+model Response {
+  id         String   @id @default(cuid())
+  inviteId   String
+  name       String   @default("A friend")
+  response   String
+  suggestion String?
+  createdAt  DateTime @default(now())
+
+  invite Invite @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+}
