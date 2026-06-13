@@ -12,14 +12,16 @@ import {
   MessageCircle,
   X,
   MessageCirclePlus,
+  CalendarClock,
 } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { InviteCard } from "@/components/InviteCard";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { PlanView } from "@/lib/types";
+import type { PlanView, TimeProposal } from "@/lib/types";
 import { summarize } from "@/lib/plan";
+import { formatDay, formatTime } from "@/lib/utils";
 
 export default function PlanPage({
   params,
@@ -36,8 +38,27 @@ export default function PlanPage({
   const [copied, setCopied] = useState(false);
   const [inviteUrl, setInviteUrl] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [decidingId, setDecidingId] = useState<string | null>(null);
 
   const reload = () => setRefreshKey((k) => k + 1);
+
+  const decide = async (proposalId: string, decision: "allow" | "decline") => {
+    setDecidingId(proposalId);
+    try {
+      const res = await fetch("/api/proposals/decide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ proposalId, decision }),
+      });
+      if (!res.ok) throw new Error("Could not update the suggestion");
+      const { plan } = await res.json();
+      setPlan(plan);
+    } catch {
+      /* keep current view; the owner can retry */
+    } finally {
+      setDecidingId(null);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -147,6 +168,31 @@ export default function PlanPage({
           </CardContent>
         </Card>
 
+        {plan.proposals.length > 0 && (
+          <div className="mt-6">
+            <h2 className="text-lg font-bold text-foreground">
+              New date/time suggestions
+            </h2>
+            <div className="mt-3 space-y-2">
+              {[...plan.proposals]
+                .sort(
+                  (a, b) =>
+                    +new Date(b.createdAt) - +new Date(a.createdAt)
+                )
+                .map((p) => (
+                  <ProposalRow
+                    key={p.id}
+                    proposal={p}
+                    deciding={decidingId === p.id}
+                    disabled={decidingId !== null}
+                    onAllow={() => decide(p.id, "allow")}
+                    onDecline={() => decide(p.id, "decline")}
+                  />
+                ))}
+            </div>
+          </div>
+        )}
+
         <div className="mt-6">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-foreground">Responses</h2>
@@ -229,6 +275,85 @@ function ResponseRow({
         <p className="mt-2 rounded-xl bg-background p-3 text-sm text-foreground">
           “{record.suggestion}”
         </p>
+      )}
+    </div>
+  );
+}
+
+function ProposalRow({
+  proposal,
+  deciding,
+  disabled,
+  onAllow,
+  onDecline,
+}: {
+  proposal: TimeProposal;
+  deciding: boolean;
+  disabled: boolean;
+  onAllow: () => void;
+  onDecline: () => void;
+}) {
+  const when = `${formatDay(proposal.proposedStart)} · ${formatTime(
+    proposal.proposedStart
+  )}`;
+
+  return (
+    <div className="rounded-2xl border border-border bg-surface p-4">
+      <div className="flex items-center gap-3">
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-soft text-accent-foreground">
+          <CalendarClock className="h-4 w-4" />
+        </span>
+        <p className="text-sm">
+          <span className="font-semibold text-foreground">
+            {proposal.name}
+          </span>{" "}
+          <span className="text-muted">suggested a new time</span>
+        </p>
+      </div>
+
+      <div className="mt-2 flex items-center gap-2 rounded-xl bg-background p-3 text-sm font-semibold text-foreground">
+        <CalendarClock className="h-4 w-4 shrink-0 text-primary" />
+        {when}
+      </div>
+
+      {proposal.message && (
+        <p className="mt-2 rounded-xl bg-background p-3 text-sm text-foreground">
+          “{proposal.message}”
+        </p>
+      )}
+
+      {proposal.status === "pending" ? (
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <Button onClick={onAllow} disabled={disabled} size="sm">
+            {deciding ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Check className="h-4 w-4" />
+            )}
+            Allow
+          </Button>
+          <Button
+            onClick={onDecline}
+            disabled={disabled}
+            variant="outline"
+            size="sm"
+          >
+            {deciding ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <X className="h-4 w-4" />
+            )}
+            Decline
+          </Button>
+        </div>
+      ) : (
+        <div className="mt-3">
+          <Badge variant={proposal.status === "allowed" ? "success" : "danger"}>
+            {proposal.status === "allowed"
+              ? "Allowed · they're in"
+              : "Declined · marked out"}
+          </Badge>
+        </div>
       )}
     </div>
   );

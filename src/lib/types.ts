@@ -32,12 +32,23 @@ export type ActivitySearchResponse = {
 
 export type PlanStatus = "open" | "agreed" | "cancelled";
 export type ResponseType = "accepted" | "declined" | "suggested";
+export type ProposalStatus = "pending" | "allowed" | "declined";
 
 export type ResponseRecord = {
   id: string;
   name: string;
   response: ResponseType;
   suggestion: string | null;
+  createdAt: string;
+};
+
+export type TimeProposal = {
+  id: string;
+  name: string;
+  proposedStart: string;
+  proposedEnd: string;
+  message: string | null;
+  status: ProposalStatus;
   createdAt: string;
 };
 
@@ -49,6 +60,7 @@ export type PlanView = {
   status: PlanStatus;
   inviteToken: string;
   responses: ResponseRecord[];
+  proposals: TimeProposal[];
   createdAt: string;
 };
 

@@ -27,6 +27,7 @@ model Invite {
 
   plan      Plan       @relation(fields: [planId], references: [id], onDelete: Cascade)
   responses Response[]
+  proposals Proposal[]
 }
 
 model Response {
@@ -36,6 +37,19 @@ model Response {
   response   String
   suggestion String?
   createdAt  DateTime @default(now())
+
+  invite Invite @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+}
+
+model Proposal {
+  id            String   @id @default(cuid())
+  inviteId      String
+  name          String   @default("A friend")
+  proposedStart DateTime
+  proposedEnd   DateTime
+  message       String?
+  status        String   @default("pending")
+  createdAt     DateTime @default(now())
 
   invite Invite @relation(fields: [inviteId], references: [id], onDelete: Cascade)
 }

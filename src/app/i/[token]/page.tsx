@@ -2,16 +2,25 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { PartyPopper, Loader2, Check, Users } from "lucide-react";
+import {
+  PartyPopper,
+  Loader2,
+  Check,
+  Users,
+  Clock,
+  CalendarClock,
+  RefreshCw,
+} from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { InviteCard } from "@/components/InviteCard";
 import { ResponseButtons } from "@/components/ResponseButtons";
-import { SuggestionModal } from "@/components/SuggestionModal";
+import { DateTimeProposalModal } from "@/components/DateTimeProposalModal";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import type { PlanView, ResponseType } from "@/lib/types";
+import type { PlanView, ResponseType, TimeProposal } from "@/lib/types";
 import { summarize } from "@/lib/plan";
+import { formatDay, formatTime } from "@/lib/utils";
 
 export default function InvitePage({
   params,
@@ -27,6 +36,9 @@ export default function InvitePage({
   const [pending, setPending] = useState<ResponseType | null>(null);
   const [done, setDone] = useState<ResponseType | null>(null);
   const [suggestOpen, setSuggestOpen] = useState(false);
+  const [proposing, setProposing] = useState(false);
+  const [myProposal, setMyProposal] = useState<TimeProposal | null>(null);
+  const [checking, setChecking] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -48,22 +60,14 @@ export default function InvitePage({
     };
   }, [token]);
 
-  const respond = async (
-    response: ResponseType,
-    suggestion?: string
-  ): Promise<boolean> => {
+  const respond = async (response: ResponseType): Promise<boolean> => {
     if (!name.trim()) return false;
     setPending(response);
     try {
       const res = await fetch("/api/invite/respond", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          token,
-          name: name.trim(),
-          response,
-          suggestion: suggestion ?? null,
-        }),
+        body: JSON.stringify({ token, name: name.trim(), response }),
       });
       if (!res.ok) throw new Error("Could not send your response");
       const { plan } = await res.json();
@@ -75,6 +79,56 @@ export default function InvitePage({
     } finally {
       setPending(null);
     }
+  };
+
+  const propose = async (input: {
+    proposedStart: string;
+    proposedEnd: string;
+    message: string | null;
+  }): Promise<boolean> => {
+    if (!name.trim()) return false;
+    setProposing(true);
+    try {
+      const res = await fetch("/api/invite/propose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, name: name.trim(), ...input }),
+      });
+      if (!res.ok) throw new Error("Could not send your suggestion");
+      const { plan } = await res.json();
+      setPlan(plan);
+      const mine = (plan.proposals as TimeProposal[])
+        .filter((p) => p.name.toLowerCase() === name.trim().toLowerCase())
+        .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))[0];
+      setMyProposal(mine ?? null);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setProposing(false);
+    }
+  };
+
+  const checkStatus = async () => {
+    if (!myProposal) return;
+    setChecking(true);
+    try {
+      const res = await fetch(`/api/invite/${token}`);
+      if (!res.ok) return;
+      const { plan } = await res.json();
+      setPlan(plan);
+      const updated = (plan.proposals as TimeProposal[]).find(
+        (p) => p.id === myProposal.id
+      );
+      if (updated) setMyProposal(updated);
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const reset = () => {
+    setDone(null);
+    setMyProposal(null);
   };
 
   if (loading) {
@@ -130,7 +184,15 @@ export default function InvitePage({
           </InviteCard>
         </div>
 
-        {done ? (
+        {myProposal ? (
+          <ProposalStatusCard
+            proposal={myProposal}
+            creatorName={plan.creatorName}
+            checking={checking}
+            onCheck={checkStatus}
+            onReset={reset}
+          />
+        ) : done ? (
           <Card className="mt-6">
             <CardContent className="flex flex-col items-center gap-3 py-8 text-center">
               <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary-soft text-primary">
@@ -143,18 +205,12 @@ export default function InvitePage({
               <p className="text-lg font-bold text-foreground">
                 {done === "accepted"
                   ? "You're in! 🎉"
-                  : done === "declined"
-                    ? "Thanks for letting us know."
-                    : "Suggestion sent!"}
+                  : "Thanks for letting us know."}
               </p>
               <p className="text-sm text-muted">
                 {plan.creatorName} can see your response now.
               </p>
-              <Button
-                variant="outline"
-                onClick={() => setDone(null)}
-                className="mt-2"
-              >
+              <Button variant="outline" onClick={reset} className="mt-2">
                 Change my response
               </Button>
             </CardContent>
@@ -192,21 +248,113 @@ export default function InvitePage({
         </p>
       </main>
 
-      <SuggestionModal
+      <DateTimeProposalModal
         open={suggestOpen}
         onClose={() => setSuggestOpen(false)}
-        activityTitle={plan.activity.title}
-        locationName={plan.activity.locationName}
-        submitting={pending === "suggested"}
-        onSubmit={async (suggestion) => {
+        activity={plan.activity}
+        submitting={proposing}
+        onSubmit={async (input) => {
           if (needName) {
             setSuggestOpen(false);
             return;
           }
-          const ok = await respond("suggested", suggestion);
+          const ok = await propose(input);
           if (ok) setSuggestOpen(false);
         }}
       />
     </>
+  );
+}
+
+function ProposalStatusCard({
+  proposal,
+  creatorName,
+  checking,
+  onCheck,
+  onReset,
+}: {
+  proposal: TimeProposal;
+  creatorName: string;
+  checking: boolean;
+  onCheck: () => void;
+  onReset: () => void;
+}) {
+  const when = `${formatDay(proposal.proposedStart)} · ${formatTime(
+    proposal.proposedStart
+  )}`;
+
+  if (proposal.status === "allowed") {
+    return (
+      <Card className="mt-6">
+        <CardContent className="flex flex-col items-center gap-3 py-8 text-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary-soft text-primary">
+            <PartyPopper className="h-7 w-7" />
+          </span>
+          <p className="text-lg font-bold text-foreground">
+            You&apos;re in! 🎉
+          </p>
+          <p className="text-sm text-muted">
+            {creatorName} approved your new time. See you {when}.
+          </p>
+          <Button variant="outline" onClick={onReset} className="mt-2">
+            Change my response
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (proposal.status === "declined") {
+    return (
+      <Card className="mt-6">
+        <CardContent className="flex flex-col items-center gap-3 py-8 text-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-red-50 text-danger">
+            <Check className="h-7 w-7" />
+          </span>
+          <p className="text-lg font-bold text-foreground">
+            {creatorName} kept the original plan.
+          </p>
+          <p className="text-sm text-muted">
+            Your suggested time wasn&apos;t a fit, so you&apos;re marked as
+            can&apos;t make it.
+          </p>
+          <Button variant="outline" onClick={onReset} className="mt-2">
+            Change my response
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="mt-6">
+      <CardContent className="flex flex-col items-center gap-3 py-8 text-center">
+        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-accent-soft text-accent-foreground">
+          <Clock className="h-7 w-7" />
+        </span>
+        <p className="text-lg font-bold text-foreground">Suggestion sent!</p>
+        <div className="flex items-center gap-2 rounded-2xl bg-primary-soft px-4 py-2 text-sm font-semibold text-primary">
+          <CalendarClock className="h-4 w-4" />
+          {when}
+        </div>
+        <p className="text-sm text-muted">
+          Waiting for {creatorName} to allow or decline. If they allow it,
+          you&apos;re automatically in.
+        </p>
+        <div className="mt-2 flex flex-col items-center gap-2">
+          <Button variant="soft" onClick={onCheck} disabled={checking}>
+            {checking ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            Check for a response
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onReset}>
+            Respond a different way
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

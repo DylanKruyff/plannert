@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, X, MessageCirclePlus, Loader2 } from "lucide-react";
+import { Check, X, CalendarClock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ResponseType } from "@/lib/types";
 
@@ -54,8 +54,8 @@ export function ResponseButtons({
           variant="soft"
           size="lg"
         >
-          <MessageCirclePlus className="h-5 w-5" />
-          Suggest
+          <CalendarClock className="h-5 w-5" />
+          New time
         </Button>
       </div>
     </div>
