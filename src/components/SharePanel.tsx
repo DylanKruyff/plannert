@@ -1,11 +1,63 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, MessageCircle, ThumbsUp } from "lucide-react";
+import { Check, Copy, MessageCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { buildShareText, buildWhatsappUrl } from "@/lib/share";
 import type { Activity } from "@/lib/types";
+
+type ShareControlsProps = {
+  activity: Activity;
+  inviteUrl: string;
+};
+
+/**
+ * The copy-the-message and WhatsApp buttons, without any surrounding chrome.
+ * Shared by {@link SharePanel} and the share modal so the two stay in sync.
+ */
+export function ShareControls({ activity, inviteUrl }: ShareControlsProps) {
+  const [copied, setCopied] = useState(false);
+
+  const shareText = inviteUrl ? buildShareText(activity, inviteUrl) : "";
+
+  const copy = async () => {
+    if (!shareText) return;
+    await navigator.clipboard.writeText(shareText);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const whatsappUrl = inviteUrl ? buildWhatsappUrl(activity, inviteUrl) : "#";
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-start gap-2 rounded-2xl border border-border bg-background px-3 py-2">
+        <pre className="flex-1 overflow-hidden whitespace-pre-wrap wrap-break-word font-sans text-sm text-muted">
+          {shareText || "…"}
+        </pre>
+        <Button onClick={copy} variant="soft" size="sm" className="shrink-0">
+          {copied ? (
+            <>
+              <Check className="h-4 w-4" /> Copied
+            </>
+          ) : (
+            <>
+              <Copy className="h-4 w-4" /> Copy
+            </>
+          )}
+        </Button>
+      </div>
+
+      <a href={whatsappUrl} target="_blank" rel="noopener noreferrer">
+        <Button variant="primary" className="w-full">
+          <MessageCircle className="h-5 w-5" />
+          Share on WhatsApp
+        </Button>
+      </a>
+    </div>
+  );
+}
 
 type SharePanelProps = {
   activity: Activity;
@@ -24,47 +76,11 @@ export function SharePanel({
   inviteUrl,
   title = "Share your plan",
 }: SharePanelProps) {
-  const [copied, setCopied] = useState(false);
-
-  const shareText = inviteUrl ? buildShareText(activity, inviteUrl) : "";
-
-  const copy = async () => {
-    if (!shareText) return;
-    await navigator.clipboard.writeText(shareText);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const whatsappUrl = inviteUrl ? buildWhatsappUrl(activity, inviteUrl) : "#";
-
   return (
     <Card>
       <CardContent className="space-y-3 pt-6">
         <p className="text-sm font-semibold text-foreground">{title}</p>
-
-        <div className="flex items-start gap-2 rounded-2xl border border-border bg-background px-3 py-2">
-          <pre className="flex-1 overflow-hidden whitespace-pre-wrap wrap-break-word font-sans text-sm text-muted">
-            {shareText || "…"}
-          </pre>
-          <Button onClick={copy} variant="soft" size="sm" className="shrink-0">
-            {copied ? (
-              <>
-                <Check className="h-4 w-4" /> Copied
-              </>
-            ) : (
-              <>
-                <Copy className="h-4 w-4" /> Copy
-              </>
-            )}
-          </Button>
-        </div>
-
-        <a href={whatsappUrl} target="_blank" rel="noopener noreferrer">
-          <Button variant="primary" className="w-full">
-            <MessageCircle className="h-5 w-5" />
-            Share on WhatsApp
-          </Button>
-        </a>
+        <ShareControls activity={activity} inviteUrl={inviteUrl} />
       </CardContent>
     </Card>
   );

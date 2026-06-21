@@ -9,11 +9,11 @@ import {
   Pencil,
   Search,
   ThumbsUp,
-  PartyPopper,
+  Send,
 } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { InviteCard } from "@/components/InviteCard";
-import { SharePanel } from "@/components/SharePanel";
+import { ShareModal } from "@/components/ShareModal";
 import { EditDateTimeModal } from "@/components/EditDateTimeModal";
 import { EditEventModal } from "@/components/EditEventModal";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,7 +31,10 @@ export default function InvitePage({
   const [plan, setPlan] = useState<PlanView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<"view" | "share">("view");
+  // Once the plan has been changed it MUST be re-shared, so we keep a persistent
+  // reminder on the page and pop the share modal open to make that unmissable.
+  const [hasUpdated, setHasUpdated] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [dateTimeOpen, setDateTimeOpen] = useState(false);
   const [eventOpen, setEventOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -51,7 +54,8 @@ export default function InvitePage({
         if (
           new URLSearchParams(window.location.search).get("updated") === "1"
         ) {
-          setMode("share");
+          setHasUpdated(true);
+          setShareOpen(true);
         }
       } catch (e) {
         if (active)
@@ -78,7 +82,8 @@ export default function InvitePage({
       if (!res.ok) throw new Error("Could not update the plan");
       const { plan: updated } = await res.json();
       setPlan(updated);
-      setMode("share");
+      setHasUpdated(true);
+      setShareOpen(true);
       return true;
     } catch {
       return false;
@@ -128,42 +133,6 @@ export default function InvitePage({
     );
   }
 
-  if (mode === "share") {
-    return (
-      <>
-        <SiteHeader />
-        <main className="mx-auto w-full max-w-md flex-1 px-5 pb-20">
-          <div className="mt-6 flex items-center gap-3 rounded-2xl bg-primary-soft p-4 text-primary">
-            <PartyPopper className="h-6 w-6 shrink-0" />
-            <p className="text-sm font-semibold">
-              Plan updated! Now you&apos;re the one sharing — send it back to
-              the group.
-            </p>
-          </div>
-
-          <div className="mt-6">
-            <SharePanel
-              activity={plan.activity}
-              inviteUrl={inviteUrl}
-              title="Share the updated plan"
-            />
-          </div>
-
-          <div className="mt-6">
-            <InviteCard activity={plan.activity} />
-          </div>
-
-          <button
-            onClick={() => setMode("view")}
-            className="mt-6 block w-full text-center text-sm font-semibold text-muted hover:text-foreground"
-          >
-            Make another change
-          </button>
-        </main>
-      </>
-    );
-  }
-
   return (
     <>
       <SiteHeader />
@@ -173,6 +142,23 @@ export default function InvitePage({
             {plan.creatorName} shared a plan
           </h1>
         </div>
+
+        {hasUpdated && (
+          <div className="mt-6 flex flex-col gap-3 rounded-2xl bg-primary-soft p-4 text-primary sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm font-semibold">
+              You changed the plan — share it so everyone sees the update.
+            </p>
+            <Button
+              onClick={() => setShareOpen(true)}
+              variant="primary"
+              size="sm"
+              className="shrink-0"
+            >
+              <Send className="h-4 w-4" />
+              Share now
+            </Button>
+          </div>
+        )}
 
         <div className="mt-6">
           <InviteCard activity={plan.activity}>
@@ -231,6 +217,12 @@ export default function InvitePage({
         </p>
       </main>
 
+      <ShareModal
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        activity={plan.activity}
+        inviteUrl={inviteUrl}
+      />
       <EditDateTimeModal
         open={dateTimeOpen}
         onClose={() => setDateTimeOpen(false)}
