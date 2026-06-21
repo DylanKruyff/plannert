@@ -49,6 +49,9 @@ function ResultsInner() {
   const initialPrompt = params.get("q") ?? "";
   const lat = params.get("lat");
   const lng = params.get("lng");
+  // When present, picking an activity edits this existing plan (the invite
+  // flow's "find a different activity") instead of creating a new one.
+  const updateToken = params.get("updateToken");
 
   // The prompt currently being searched, and the (possibly edited) draft in the
   // refine bar. Seeding both from the URL keeps reloads and shared links working.
@@ -128,6 +131,16 @@ function ResultsInner() {
   const choose = async (activity: Activity) => {
     setChoosingId(activity.id);
     try {
+      if (updateToken) {
+        const res = await fetch(`/api/invite/${updateToken}/update`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ activity }),
+        });
+        if (!res.ok) throw new Error("Could not update plan");
+        router.push(`/i/${updateToken}?updated=1`);
+        return;
+      }
       const res = await fetch("/api/plans/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -138,7 +151,11 @@ function ResultsInner() {
       router.push(`/plan/${planId}?created=1`);
     } catch {
       setChoosingId(null);
-      setError("Could not create the plan. Please try again.");
+      setError(
+        updateToken
+          ? "Could not update the plan. Please try again."
+          : "Could not create the plan. Please try again."
+      );
     }
   };
 
@@ -161,6 +178,13 @@ function ResultsInner() {
             </span>
           )}
         </div>
+
+        {updateToken && (
+          <div className="mt-4 rounded-2xl bg-primary-soft p-4 text-sm font-semibold text-primary">
+            Pick a new activity to swap into the plan. You&apos;ll share the
+            update with the group next.
+          </div>
+        )}
 
         <div className="mt-4">
           <p className="text-sm font-semibold uppercase tracking-wide text-primary">
@@ -223,6 +247,8 @@ function ResultsInner() {
                     activity={activity}
                     onChoose={choose}
                     selecting={choosingId === activity.id}
+                    chooseLabel={updateToken ? "Swap in this plan" : "Choose"}
+                    busyLabel={updateToken ? "Updating plan…" : "Creating plan…"}
                   />
                 ))}
               </div>

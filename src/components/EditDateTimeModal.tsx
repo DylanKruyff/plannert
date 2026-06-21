@@ -4,19 +4,18 @@ import * as React from "react";
 import { Loader2, CalendarClock } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
-import { Input, Textarea } from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
 import type { Activity } from "@/lib/types";
 import { formatDay, formatTime } from "@/lib/utils";
 
-type DateTimeProposalModalProps = {
+type EditDateTimeModalProps = {
   open: boolean;
   onClose: () => void;
   activity: Activity;
   submitting?: boolean;
   onSubmit: (input: {
-    proposedStart: string;
-    proposedEnd: string;
-    message: string | null;
+    startTime: string;
+    endTime: string;
   }) => Promise<void> | void;
 };
 
@@ -33,25 +32,21 @@ function toTimeInputValue(date: Date): string {
   return `${h}:${min}`;
 }
 
-export function DateTimeProposalModal(props: DateTimeProposalModalProps) {
+export function EditDateTimeModal(props: EditDateTimeModalProps) {
   return (
     <Modal
       open={props.open}
       onClose={props.onClose}
-      title="Suggest a new date or time"
-      description="Pick what works for you. The host can approve it with one tap."
+      title="Change the date or time"
+      description="Pick what works for you. You'll share the update with the group next."
     >
       {/* Inner form unmounts on close, so its state resets automatically. */}
-      <ProposalForm {...props} />
+      {props.open && <DateTimeForm {...props} />}
     </Modal>
   );
 }
 
-function ProposalForm({
-  activity,
-  submitting,
-  onSubmit,
-}: DateTimeProposalModalProps) {
+function DateTimeForm({ activity, submitting, onSubmit }: EditDateTimeModalProps) {
   const originalStart = React.useMemo(
     () => new Date(activity.startTime),
     [activity.startTime]
@@ -65,7 +60,6 @@ function ProposalForm({
 
   const [date, setDate] = React.useState(() => toDateInputValue(originalStart));
   const [time, setTime] = React.useState(() => toTimeInputValue(originalStart));
-  const [note, setNote] = React.useState("");
 
   const proposedStart = date && time ? new Date(`${date}T${time}`) : null;
   const valid =
@@ -77,9 +71,8 @@ function ProposalForm({
     if (!valid) return;
     const proposedEnd = new Date(proposedStart!.getTime() + durationMs);
     onSubmit({
-      proposedStart: proposedStart!.toISOString(),
-      proposedEnd: proposedEnd.toISOString(),
-      message: note.trim() || null,
+      startTime: proposedStart!.toISOString(),
+      endTime: proposedEnd.toISOString(),
     });
   };
 
@@ -115,25 +108,13 @@ function ProposalForm({
         </div>
       )}
 
-      <div>
-        <label className="mb-1 block text-sm font-semibold text-foreground">
-          Add a note (optional)
-        </label>
-        <Textarea
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          rows={3}
-          placeholder="e.g. I can't do Saturday — would Sunday work?"
-        />
-      </div>
-
       <Button
         onClick={submit}
         disabled={!valid || !changed || submitting}
         className="w-full"
       >
         {submitting && <Loader2 className="h-5 w-5 animate-spin" />}
-        {changed ? "Send suggestion" : "Pick a different date or time"}
+        {changed ? "Update & share" : "Pick a different date or time"}
       </Button>
     </div>
   );

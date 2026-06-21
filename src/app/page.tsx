@@ -7,7 +7,7 @@ import { Users, Share2, ThumbsUp, ChevronRight } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { PromptInput } from "@/components/PromptInput";
 import { getCreatorId } from "@/lib/creator";
-import { summarize } from "@/lib/plan";
+import { formatDay, formatTime } from "@/lib/utils";
 import type { PlanView } from "@/lib/types";
 
 function getPosition(): Promise<GeolocationPosition | null> {
@@ -72,8 +72,8 @@ export default function HomePage() {
             with your friends.
           </h1>
           <p className="mx-auto mt-4 max-w-md text-balance text-lg text-muted">
-            Tell us what you want to do. We&apos;ll find the options and help
-            everyone agree on a plan and a time.
+            Tell us what you want to do. We&apos;ll find the options and give you
+            one link to share — the group sorts out the rest on WhatsApp.
           </p>
         </section>
 
@@ -99,14 +99,14 @@ export default function HomePage() {
             text="Get real activity ideas based on your vibe and location."
           />
           <Feature
-            icon={<Share2 className="h-6 w-6" />}
-            title="Share a link"
-            text="Send one link on WhatsApp. No app or account needed."
+            icon={<ThumbsUp className="h-6 w-6" />}
+            title="Thumbs up to join"
+            text="Friends just react on WhatsApp if they're in. No app or account needed."
           />
           <Feature
-            icon={<ThumbsUp className="h-6 w-6" />}
-            title="Reach agreement"
-            text="Friends accept, decline, or suggest a change in a tap."
+            icon={<Share2 className="h-6 w-6" />}
+            title="Anyone can tweak it"
+            text="Can't make it? Tap the link, change the time or plan, and re-share."
           />
         </section>
       </main>
@@ -118,7 +118,6 @@ export default function HomePage() {
 }
 
 function PlanRow({ plan }: { plan: PlanView }) {
-  const summary = summarize(plan);
   return (
     <Link
       href={`/plan/${plan.id}`}
@@ -131,7 +130,10 @@ function PlanRow({ plan }: { plan: PlanView }) {
         <p className="truncate font-bold text-foreground">
           {plan.activity.title}
         </p>
-        <p className="truncate text-sm text-muted">{summary.headline}</p>
+        <p className="truncate text-sm text-muted">
+          {formatDay(plan.activity.startTime)} ·{" "}
+          {formatTime(plan.activity.startTime)}
+        </p>
       </div>
       <ChevronRight className="h-5 w-5 shrink-0 text-muted" />
     </Link>

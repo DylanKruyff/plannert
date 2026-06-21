@@ -3,25 +3,12 @@
 import { use, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import {
-  Check,
-  Copy,
-  PartyPopper,
-  RefreshCw,
-  Loader2,
-  MessageCircle,
-  X,
-  MessageCirclePlus,
-  CalendarClock,
-} from "lucide-react";
+import { PartyPopper, Loader2 } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { InviteCard } from "@/components/InviteCard";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { SharePanel } from "@/components/SharePanel";
 import { Button } from "@/components/ui/button";
-import type { PlanView, TimeProposal } from "@/lib/types";
-import { summarize } from "@/lib/plan";
-import { formatDay, formatTime } from "@/lib/utils";
+import type { PlanView } from "@/lib/types";
 
 export default function PlanPage({
   params,
@@ -35,30 +22,7 @@ export default function PlanPage({
   const [plan, setPlan] = useState<PlanView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [inviteUrl, setInviteUrl] = useState("");
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [decidingId, setDecidingId] = useState<string | null>(null);
-
-  const reload = () => setRefreshKey((k) => k + 1);
-
-  const decide = async (proposalId: string, decision: "allow" | "decline") => {
-    setDecidingId(proposalId);
-    try {
-      const res = await fetch("/api/proposals/decide", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ proposalId, decision }),
-      });
-      if (!res.ok) throw new Error("Could not update the suggestion");
-      const { plan } = await res.json();
-      setPlan(plan);
-    } catch {
-      /* keep current view; the owner can retry */
-    } finally {
-      setDecidingId(null);
-    }
-  };
 
   useEffect(() => {
     let active = true;
@@ -81,13 +45,7 @@ export default function PlanPage({
     return () => {
       active = false;
     };
-  }, [id, refreshKey]);
-
-  const copy = async () => {
-    await navigator.clipboard.writeText(inviteUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  }, [id]);
 
   if (loading) {
     return (
@@ -116,11 +74,6 @@ export default function PlanPage({
     );
   }
 
-  const summary = summarize(plan);
-  const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(
-    `Join my plan: ${plan.activity.title}! ${inviteUrl}`
-  )}`;
-
   return (
     <>
       <SiteHeader />
@@ -129,232 +82,24 @@ export default function PlanPage({
           <div className="mt-6 flex items-center gap-3 rounded-2xl bg-primary-soft p-4 text-primary">
             <PartyPopper className="h-6 w-6 shrink-0" />
             <p className="text-sm font-semibold">
-              Plan created! Share the link to get everyone on board.
+              Plan created! Share it with the group to get everyone on board.
             </p>
           </div>
         )}
+
+        <div className="mt-6">
+          <SharePanel activity={plan.activity} inviteUrl={inviteUrl} />
+        </div>
 
         <div className="mt-6">
           <InviteCard activity={plan.activity} />
         </div>
 
-        <Card className="mt-5">
-          <CardContent className="space-y-3 pt-6">
-            <p className="text-sm font-semibold text-foreground">
-              Share your invite link
-            </p>
-            <div className="flex items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2">
-              <span className="flex-1 truncate text-sm text-muted">
-                {inviteUrl || "…"}
-              </span>
-              <Button onClick={copy} variant="soft" size="sm">
-                {copied ? (
-                  <>
-                    <Check className="h-4 w-4" /> Copied
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-4 w-4" /> Copy
-                  </>
-                )}
-              </Button>
-            </div>
-            <a href={whatsappUrl} target="_blank" rel="noopener noreferrer">
-              <Button variant="primary" className="w-full">
-                <MessageCircle className="h-5 w-5" />
-                Share on WhatsApp
-              </Button>
-            </a>
-          </CardContent>
-        </Card>
-
-        {plan.proposals.length > 0 && (
-          <div className="mt-6">
-            <h2 className="text-lg font-bold text-foreground">
-              New date/time suggestions
-            </h2>
-            <div className="mt-3 space-y-2">
-              {[...plan.proposals]
-                .sort(
-                  (a, b) =>
-                    +new Date(b.createdAt) - +new Date(a.createdAt)
-                )
-                .map((p) => (
-                  <ProposalRow
-                    key={p.id}
-                    proposal={p}
-                    deciding={decidingId === p.id}
-                    disabled={decidingId !== null}
-                    onAllow={() => decide(p.id, "allow")}
-                    onDecline={() => decide(p.id, "decline")}
-                  />
-                ))}
-            </div>
-          </div>
-        )}
-
-        <div className="mt-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-foreground">Responses</h2>
-            <button
-              onClick={reload}
-              className="inline-flex items-center gap-1 text-sm font-semibold text-muted hover:text-foreground"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Refresh
-            </button>
-          </div>
-
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Badge variant="success">{summary.accepted} accepted</Badge>
-            {summary.declined > 0 && (
-              <Badge variant="danger">{summary.declined} declined</Badge>
-            )}
-            {summary.suggested > 0 && (
-              <Badge variant="accent">{summary.suggested} suggested</Badge>
-            )}
-            <span className="text-sm font-medium text-muted">
-              {summary.headline}
-            </span>
-          </div>
-
-          <div className="mt-4 space-y-2">
-            {summary.latest.length === 0 && (
-              <p className="rounded-2xl border border-dashed border-border bg-surface p-6 text-center text-sm text-muted">
-                No responses yet. Share the link above to get started.
-              </p>
-            )}
-            {summary.latest.map((r) => (
-              <ResponseRow key={r.id} record={r} />
-            ))}
-          </div>
-        </div>
+        <p className="mt-6 text-center text-xs text-muted">
+          Friends reply on WhatsApp. If someone can&apos;t make it, they&apos;ll
+          tweak the plan and re-share it here.
+        </p>
       </main>
     </>
-  );
-}
-
-function ResponseRow({
-  record,
-}: {
-  record: { name: string; response: string; suggestion: string | null };
-}) {
-  const map = {
-    accepted: {
-      icon: <Check className="h-4 w-4" />,
-      cls: "bg-primary-soft text-primary",
-      label: "is in",
-    },
-    declined: {
-      icon: <X className="h-4 w-4" />,
-      cls: "bg-red-50 text-danger",
-      label: "can't make it",
-    },
-    suggested: {
-      icon: <MessageCirclePlus className="h-4 w-4" />,
-      cls: "bg-accent-soft text-accent-foreground",
-      label: "suggested a change",
-    },
-  } as const;
-  const style = map[record.response as keyof typeof map] ?? map.accepted;
-
-  return (
-    <div className="rounded-2xl border border-border bg-surface p-4">
-      <div className="flex items-center gap-3">
-        <span
-          className={`flex h-9 w-9 items-center justify-center rounded-full ${style.cls}`}
-        >
-          {style.icon}
-        </span>
-        <p className="text-sm">
-          <span className="font-semibold text-foreground">{record.name}</span>{" "}
-          <span className="text-muted">{style.label}</span>
-        </p>
-      </div>
-      {record.suggestion && (
-        <p className="mt-2 rounded-xl bg-background p-3 text-sm text-foreground">
-          “{record.suggestion}”
-        </p>
-      )}
-    </div>
-  );
-}
-
-function ProposalRow({
-  proposal,
-  deciding,
-  disabled,
-  onAllow,
-  onDecline,
-}: {
-  proposal: TimeProposal;
-  deciding: boolean;
-  disabled: boolean;
-  onAllow: () => void;
-  onDecline: () => void;
-}) {
-  const when = `${formatDay(proposal.proposedStart)} · ${formatTime(
-    proposal.proposedStart
-  )}`;
-
-  return (
-    <div className="rounded-2xl border border-border bg-surface p-4">
-      <div className="flex items-center gap-3">
-        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-soft text-accent-foreground">
-          <CalendarClock className="h-4 w-4" />
-        </span>
-        <p className="text-sm">
-          <span className="font-semibold text-foreground">
-            {proposal.name}
-          </span>{" "}
-          <span className="text-muted">suggested a new time</span>
-        </p>
-      </div>
-
-      <div className="mt-2 flex items-center gap-2 rounded-xl bg-background p-3 text-sm font-semibold text-foreground">
-        <CalendarClock className="h-4 w-4 shrink-0 text-primary" />
-        {when}
-      </div>
-
-      {proposal.message && (
-        <p className="mt-2 rounded-xl bg-background p-3 text-sm text-foreground">
-          “{proposal.message}”
-        </p>
-      )}
-
-      {proposal.status === "pending" ? (
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <Button onClick={onAllow} disabled={disabled} size="sm">
-            {deciding ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Check className="h-4 w-4" />
-            )}
-            Allow
-          </Button>
-          <Button
-            onClick={onDecline}
-            disabled={disabled}
-            variant="outline"
-            size="sm"
-          >
-            {deciding ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <X className="h-4 w-4" />
-            )}
-            Decline
-          </Button>
-        </div>
-      ) : (
-        <div className="mt-3">
-          <Badge variant={proposal.status === "allowed" ? "success" : "danger"}>
-            {proposal.status === "allowed"
-              ? "Allowed · they're in"
-              : "Declined · marked out"}
-          </Badge>
-        </div>
-      )}
-    </div>
   );
 }

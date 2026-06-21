@@ -1,7 +1,7 @@
 import { google } from "@ai-sdk/google";
 import { generateObject } from "ai";
 import { z } from "zod";
-import type { Activity, SearchPreferences, Suggestion } from "./types";
+import type { Activity, SearchPreferences } from "./types";
 import {
   buildActivities,
   fallbackPreferences,
@@ -222,63 +222,5 @@ Rules for activities:
     };
   } catch {
     return fallbackPlan(prompt, locationHint);
-  }
-}
-
-const suggestionSchema = z.object({
-  suggestions: z.array(
-    z.object({
-      type: z.enum(["time", "date", "activity", "location"]),
-      title: z.string(),
-      detail: z.string(),
-    })
-  ),
-});
-
-/**
- * Generate alternative suggestions when a friend can't make the current plan.
- */
-export async function generateSuggestions(input: {
-  activityTitle: string;
-  reason: string;
-  locationName: string;
-}): Promise<Suggestion[]> {
-  const fallback: Suggestion[] = [
-    {
-      type: "date",
-      title: "Try Sunday instead",
-      detail: "Move the plan one day later in the weekend.",
-    },
-    {
-      type: "time",
-      title: "Earlier in the evening",
-      detail: "Shift to 18:00 so it works for more people.",
-    },
-    {
-      type: "activity",
-      title: "A more relaxed option",
-      detail: `Swap ${input.activityTitle} for a casual dinner nearby.`,
-    },
-    {
-      type: "location",
-      title: "Somewhere more central",
-      detail: `Pick a spot closer to the middle of ${input.locationName}.`,
-    },
-  ];
-
-  if (!hasAi) return fallback;
-
-  try {
-    const { object } = await generateObject({
-      model: google(MODEL),
-      providerOptions: FAST_OPTIONS,
-      schema: suggestionSchema,
-      prompt: `A friend can't make this plan: "${input.activityTitle}" in ${input.locationName}.
-Their reason: "${input.reason}".
-Suggest 3-4 realistic alternatives (different time, date, activity, or location). Keep them generic and do not invent specific venues, events, opening hours, or availability.`,
-    });
-    return object.suggestions.length ? object.suggestions : fallback;
-  } catch {
-    return fallback;
   }
 }

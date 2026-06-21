@@ -17,9 +17,12 @@ reach agreement.
   then reverse-geocodes coordinates to a city.
 - **Shareable invites** — pick an activity, get a link like `/i/7Hd82k`, and
   share it on WhatsApp. Friends don't need an account.
-- **Accept / Decline / Suggest** — friends respond in one tap, or suggest a
-  different time, date, activity, or location.
-- **Live plan status** — see who's in and who suggested a change.
+- **Chat-native agreement** — the group negotiates right in WhatsApp: thumbs up
+  (or reply) if you're in, no in-app RSVP needed.
+- **Anyone can re-plan** — if a friend can't make it, they tap the link to
+  change the date/time, edit the event, or swap in a different activity, then
+  re-share the updated plan with the group. The link stays the same, so the
+  cycle continues.
 - **Mobile-first, warm, friendly UI** built with Tailwind + shadcn-style
   components.
 
@@ -45,10 +48,10 @@ Open http://localhost:3000.
 
 Plannert is designed to run with **zero configuration** for local development:
 
-- **No `DATABASE_URL`?** Plans/invites/responses are persisted to a local JSON
+- **No `DATABASE_URL`?** Plans and invites are persisted to a local JSON
   file store (`.plannert-data/`).
-- **No AI key?** Preference extraction, activity discovery, and suggestions fall
-  back to a built-in deterministic engine (the bundled template activities).
+- **No AI key?** Preference extraction and activity discovery fall back to a
+  built-in deterministic engine (the bundled template activities).
 
 ### Enabling PostgreSQL
 
@@ -89,24 +92,26 @@ GOOGLE_GENERATIVE_AI_API_KEY="your-key"
 
 | Endpoint                  | Method | Purpose                                       |
 | ------------------------- | ------ | --------------------------------------------- |
-| `/api/activity/search`    | POST   | Extract preferences, discover real activities via AI |
-| `/api/plans/create`       | POST   | Create a plan + invite link from an activity  |
-| `/api/invite/respond`     | POST   | Accept / decline / suggest a change           |
-| `/api/suggestions/create` | POST   | Generate alternative suggestions              |
-| `/api/plans/[id]`         | GET    | Fetch plan + responses (creator view)         |
-| `/api/invite/[token]`     | GET    | Fetch plan by invite token (friend view)      |
+| `/api/activity/search`       | POST   | Extract preferences, discover real activities via AI |
+| `/api/plans/create`          | POST   | Create a plan + invite link from an activity  |
+| `/api/plans/[id]`            | GET    | Fetch plan (creator share view)               |
+| `/api/invite/[token]`        | GET    | Fetch plan by invite token (friend view)      |
+| `/api/invite/[token]/update` | POST   | Edit the plan's activity (date/time or whole event) |
 
 ## App routes
 
 - `/` — landing + prompt input
-- `/results` — ranked activity cards
-- `/plan/[id]` — plan status + share link (creator)
-- `/i/[token]` — invite page (friend)
+- `/results` — ranked activity cards (also used to swap an activity into an
+  existing plan via `?updateToken=`)
+- `/plan/[id]` — share link (creator)
+- `/i/[token]` — invite page: thumbs-up prompt + edit/re-share (friend)
 
 ## Data model
 
-`plans` → `invites` → `responses` (see `prisma/schema.prisma`). Activities are
-stored as **structured JSON** (`activityJson`), never as raw AI text.
+`plans` → `invites` (see `prisma/schema.prisma`). Activities are stored as
+**structured JSON** (`activityJson`), never as raw AI text. Negotiation happens
+in the group chat, so editing the plan's activity is the only mutation an invite
+link grants.
 
 ## AI principles
 
@@ -131,11 +136,12 @@ src/
     i/[token]/           # invite page
   components/
     ui/                  # button, card, input, badge, modal
-    PromptInput, ActivityCard, InviteCard, ResponseButtons, SuggestionModal
+    PromptInput, ActivityCard, InviteCard, SharePanel,
+    EditDateTimeModal, EditEventModal
   lib/
     ai.ts                # Vercel AI SDK integration: discover/rank activities + fallbacks
     activities.ts        # activity builder + deterministic fallback engine
     store.ts             # Prisma + JSON-file data layer
     geocode.ts           # reverse geocoding
-    plan.ts, types.ts, utils.ts
+    share.ts, types.ts, utils.ts
 ```

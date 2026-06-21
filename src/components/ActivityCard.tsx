@@ -12,6 +12,8 @@ type ActivityCardProps = {
   onChoose?: (activity: Activity) => void;
   selecting?: boolean;
   compact?: boolean;
+  chooseLabel?: string;
+  busyLabel?: string;
 };
 
 export function ActivityCard({
@@ -19,6 +21,8 @@ export function ActivityCard({
   onChoose,
   selecting,
   compact,
+  chooseLabel = "Choose",
+  busyLabel = "Creating plan…",
 }: ActivityCardProps) {
   return (
     <Card className="flex h-full flex-col overflow-hidden transition-transform hover:-translate-y-0.5">
@@ -76,12 +80,12 @@ export function ActivityCard({
             {selecting ? (
               <>
                 <Loader2 className="h-5 w-5 animate-spin" />
-                Creating plan…
+                {busyLabel}
               </>
             ) : (
               <>
                 <Check className="h-5 w-5" />
-                Choose
+                {chooseLabel}
               </>
             )}
           </Button>
